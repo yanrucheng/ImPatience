@@ -1,20 +1,20 @@
 from solitaire import Game
-import collections, argparse
+import collections, argparse, random
 import heapq
 
-def dfs(game):
-    dp = [game.start_state]
+def simple_search(game):
+    dp = collections.deque([game.start_state])
     met = set()
 
     while dp:
         state = dp.pop()
         #state.visualize()
-        #print(hash(state))
 
         if game.is_goal_state(state):
             return state.solution
 
         states = game.get_successors(state)
+        #print(len(states))
         for s in states:
             if s not in met:
                 dp.append(s)
@@ -66,7 +66,7 @@ if __name__ == '__main__':
     args = arg_parser_setup()
     game = Game(args.filename)
     state = game.start_state
-    res = dfs(game)
+    res = simple_search(game)
     for i,x in enumerate(res):
-        print(i,x)
+        print('Step {}: {}'.format(i, x))
 

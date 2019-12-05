@@ -2,10 +2,11 @@ import collections
 import argparse, copy
 from functools import lru_cache, total_ordering
 
-
+@lru_cache()
 def get_num(card):
     return int(card[1:]) if len(card) > 1 else None
 
+@lru_cache()
 def get_type(card):
     return card[0]
 
@@ -17,7 +18,8 @@ class GameState:
     There are 3 goal slots, namely slots for red, black and green.
     There are 8 columns on the deck. each start with 5 cards.
     '''
-    __slots__ = ['buffer_area', 'buffer_size', 'goal_buffer', 'collected', 'deck', 'flower_in_deck', 'solution', 'history']
+    __slots__ = ['buffer_area', 'buffer_size', 'goal_buffer', 'collected', 'deck', 'flower_in_deck',
+            'solution', 'history', 'locked_to_locker', 'locker_to_locked']
 
     ORIGINAL_BUFFER_SIZE = 3
     GOALS = ['r', 'g', 'b']
@@ -34,13 +36,16 @@ class GameState:
         # solution is not calculated in hash
         self.solution = []
         self.history = set()
+        self.locked_to_locker = {}
+        self.locker_to_locked = {}
 
     def __hash__(self):
-        deck = hash(tuple(set(''.join(l) for l in self.deck)))
-        buffer_area = hash(tuple(set(x for x in self.buffer_area)))
-        goal = hash(tuple(self.goal_buffer.values()))
-        flower = hash(self.flower_in_deck)
-        return hash((deck, buffer_area, goal, flower))
+        deck = ' '.join(sorted(''.join(l) for l in self.deck))
+        buffer_area = ' '.join(sorted(x for x in self.buffer_area))
+        goal = str(self.goal_buffer.values())
+        flower = str(self.flower_in_deck)
+        #print(deck, buffer_area, goal, flower)
+        return hash(deck + buffer_area + goal + flower)
 
     def __eq__(self, other):
         return hash(self) == hash(other)
@@ -114,9 +119,39 @@ class Game:
         collect_target=None, auto_proceed=True
     ):
         '''Generate a new successor state based on the given action. Record the new hash'''
+
+        def unlock(state, inv):
+            if inv in state.locker_to_locked:
+                locked = state.locker_to_locked[inv]
+                for locker in state.locked_to_locker[locked]:
+                    del state.locker_to_locked[locker]
+                del state.locked_to_locker[locked]
+
+        # determine whether this action is locked
+        if (source == 'deck' and source_position in state.locked_to_locker) or\
+                (source == 'buffer' and 'buffer' in state.locked_to_locker):
+            return None
+
         new_state = state.copy()
         if not collect_target:
-            card = new_state.deck[source_position].pop() if source == 'deck' else new_state.buffer_area.pop(source_position)
+            card = new_state.deck[source_position].pop() if source == 'deck' else \
+                    new_state.buffer_area.pop(source_position)
+
+            # locking process
+            if to != 'goal':
+                locked = to_position if to == 'deck' else 'buffer'
+                involved = [locked, source_position if source == 'deck' else 'buffer']
+                # if not put to goal, the destination is locked
+                new_state.locked_to_locker[locked] = involved
+                for l in involved:
+                    new_state.locker_to_locked[l] = locked
+
+            # unlocking process
+            involved = [source_position if source_position == 'deck' else 'buffer',
+                        to_position if to == 'deck' else to]
+            for inv in involved:
+                unlock(new_state, inv)
+
 
             if to=='goal':
                 new_state.goal_buffer[get_type(card)] = get_num(card)
@@ -132,13 +167,24 @@ class Game:
                 if new_state.deck[i] and new_state.deck[i][-1] == 'f':
                     new_state.deck[i].pop(); break
 
+            # collect flower does not unlock anything
+
         else:
+            involved = []
+            if collect_target in new_state.buffer_area: involved.append('buffer')
+
             new_state.buffer_size -= 1
             new_state.buffer_area = [x for x in new_state.buffer_area if x != collect_target]
-            for c in new_state.deck:
+
+            for i,c in enumerate(new_state.deck):
                 if c and c[-1] == collect_target:
                     c.pop()
+                    involved.append(i)
             new_state.collected[collect_target] = True
+
+            for inv in involved:
+                unlock(new_state, inv)
+
 
         if hash(new_state) in new_state.history:
             return None
@@ -193,6 +239,7 @@ class Game:
         for i,c in enumerate(state.deck):
             if not c: continue
             card = c[-1]
+
             if get_num(card) and state.goal_buffer[get_type(card)] == get_num(card) - 1:
                 res.append(self.take_action(state, source='deck', source_position=i, to='goal'))
 
@@ -211,12 +258,20 @@ class Game:
                 res.append(self.take_action(state, source='buffer', source_position=i, to='goal'))
 
             for j, col in enumerate(state.deck):
-                if col and get_num(card) and j != i and get_type(col[-1]) != get_type(card) and get_num(col[-1]) == get_num(card) + 1:
+                if col and get_num(card) and j != i and \
+                        get_type(col[-1]) != get_type(card) and get_num(col[-1]) == get_num(card) + 1:
                     res.append(self.take_action(state, source='buffer', source_position=i, to='deck', to_position=j))
                 elif not col:
                     res.append(self.take_action(state, source='buffer', source_position=i, to='deck', to_position=j))
 
-        return set(x for x in res if x)
+        states = []
+        met = set()
+        for x in res:
+            if x and x not in met:
+                met.add(x)
+                states.append(x)
+
+        return states
 
 def arg_parser_setup():
     parser = argparse.ArgumentParser(description='Test Game logic.')
