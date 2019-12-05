@@ -17,7 +17,7 @@ class GameState:
     There are 3 goal slots, namely slots for red, black and green.
     There are 8 columns on the deck. each start with 5 cards.
     '''
-    __slots__ = ['buffer_area', 'buffer_size', 'goal_buffer', 'collected', 'deck', 'flower_in_deck', 'solution']
+    __slots__ = ['buffer_area', 'buffer_size', 'goal_buffer', 'collected', 'deck', 'flower_in_deck', 'solution', 'history']
 
     ORIGINAL_BUFFER_SIZE = 3
     GOALS = ['r', 'g', 'b']
@@ -33,9 +33,10 @@ class GameState:
 
         # solution is not calculated in hash
         self.solution = []
+        self.history = set()
 
     def __hash__(self):
-        deck = hash(tuple(set(tuple(x for x in c) for c in self.deck)))
+        deck = hash(tuple(set(''.join(l) for l in self.deck)))
         buffer_area = hash(tuple(set(x for x in self.buffer_area)))
         goal = hash(tuple(self.goal_buffer.values()))
         flower = hash(self.flower_in_deck)
@@ -49,6 +50,9 @@ class GameState:
 
     def copy(self):
         return copy.deepcopy(self)
+
+    def record(self):
+        self.history.add(hash(self))
 
     def visualize(self):
         print()
@@ -72,6 +76,7 @@ class Game:
             for column, line in zip(state.deck, lines):
                 for x in line.strip().split():
                     column.append(x)
+        state.record()
         return state
 
     def is_valid_state(self, state):
@@ -103,75 +108,84 @@ class Game:
         # check whether is goal state
         return all(x == 9 for x in state.goal_buffer.values())
 
+    def take_action(
+        self, state,
+        source='deck', source_position='', to='goal', to_position='',
+        collect_target=None, auto_proceed=True
+    ):
+        '''Generate a new successor state based on the given action. Record the new hash'''
+        new_state = state.copy()
+        if not collect_target:
+            card = new_state.deck[source_position].pop() if source == 'deck' else new_state.buffer_area.pop(source_position)
+
+            if to=='goal':
+                new_state.goal_buffer[get_type(card)] = get_num(card)
+            elif to=='deck':
+                new_state.deck[to_position].append(card)
+            elif to=='buffer':
+                new_state.buffer_area.append(card)
+
+
+        elif  collect_target == 'flower':
+            new_state.flower_in_deck = False
+            for i in range(len(new_state.deck)):
+                if new_state.deck[i] and new_state.deck[i][-1] == 'f':
+                    new_state.deck[i].pop(); break
+
+        else:
+            new_state.buffer_size -= 1
+            new_state.buffer_area = [x for x in new_state.buffer_area if x != collect_target]
+            for c in new_state.deck:
+                if c and c[-1] == collect_target:
+                    c.pop()
+            new_state.collected[collect_target] = True
+
+        if hash(new_state) in new_state.history:
+            return None
+
+        new_state.record()
+        if collect_target:
+            new_state.solution.append('collect {}'.format(collect_target))
+        else:
+            new_state.solution.append('{} at {} {} to {} {}'.format(card, source, source_position, to, to_position))
+
+        if auto_proceed:
+            new_state = self.auto_proceed(new_state)
+
+        return new_state
+
+    def auto_proceed(self, state):
+        # get rid of the flower once met
+        if state.flower_in_deck and 'f' in [c[-1] for c in state.deck if c]:
+            state = self.take_action(state, collect_target='flower', auto_proceed=False)
+            assert state, 'auto proceed failure'
+
+        # put the smallest exposed card to goal
+        def auto_put_to_goal(state):
+            type, target = min(state.goal_buffer.items(), key=lambda x:x[1])
+            for i,c in enumerate(state.deck):
+                if c and get_type(c[-1]) == type and get_num(c[-1]) == target+1:
+                    state = self.take_action(state, source='deck', source_position=i, to='goal', auto_proceed=False)
+                    assert state, 'auto proceed failure'
+                    return state
+
+        while True:
+            tmp = auto_put_to_goal(state)
+            if not tmp: break
+            state = tmp
+
+        return state
+
     @lru_cache(maxsize=None)
     def get_successors(self, state):
         # add code to return list of successor states
         if self.is_goal_state(state): return []
 
-        # get rid of the flower once met
-        if 'f' in [c[-1] for c in state.deck if c]:
-            state.flower_in_deck = False
-            state.solution.append('remove flower')
-            for i in range(len(state.deck)):
-                if state.deck[i] and state.deck[i][-1] == 'f':
-                    state.deck[i].pop()
-        res = []
-
-        def auto_put_to_goal(state):
-            type, target = min(state.goal_buffer.items(), key=lambda x:x[1])
-            for c in state.deck:
-                if c and get_type(c[-1]) == type and get_num(c[-1]) == target+1:
-                    tmp = c.pop()
-                    state.goal_buffer[type] = get_num(tmp)
-                    state.solution.append('{} to goal'.format(str(tmp)))
-                    return True
-
-        while auto_put_to_goal(state):
-            pass
-
+        res = [] # if the successor is already visited, a None will be stored in res
         def collect_all_collectables(state, type):
-            if not state.collected[type] and sum(x[-1]==type for x in state.deck if x) + sum(x==type for x in state.buffer_area) == 4:
-                new_state = state.copy()
-                new_state.buffer_size -= 1
-                new_state.buffer_area = [x for x in new_state.buffer_area if x != type]
-                for c in new_state.deck:
-                    if c and c[-1] == type:
-                        c.pop()
-                new_state.collected[type] = True
-                new_state.solution.append('collect {}'.format(type))
-                res.append(new_state)
-
-        def put_to_buffer(state, i):
-            new_state = state.copy()
-            tmp = new_state.deck[i].pop()
-            new_state.buffer_area.append(tmp)
-            new_state.solution.append('{} at {} to buffer'.format(str(tmp),i+1))
-            res.append(new_state)
-
-        def put_to_goal(state, i, in_deck=True):
-            new_state = state.copy()
-            if in_deck:
-                tmp = new_state.deck[i].pop()
-                new_state.solution.append('{} at {} to goal'.format(str(tmp),i+1))
-            else:
-                tmp = new_state.buffer_area[i]
-                new_state.solution.append('{} in buffer to goal'.format(str(tmp)))
-                del new_state.buffer_area[i]
-            new_state.goal_buffer[get_type(tmp)] = get_num(tmp)
-            res.append(new_state)
-
-        def put_to_deck(state, j, i, from_deck=True):
-            new_state = state.copy()
-            if from_deck:
-                tmp = new_state.deck[i].pop()
-                new_state.deck[j].append(tmp)
-                new_state.solution.append('{} at {} to {}'.format(str(tmp), i+1, j+1))
-            else:
-                tmp = new_state.buffer_area[i]
-                new_state.deck[j].append(tmp)
-                new_state.solution.append('{} in buffer to deck {}'.format(str(tmp), j+1))
-                del new_state.buffer_area[i]
-            res.append(new_state)
+            if not state.collected[type] and \
+                    sum(x[-1]==type for x in state.deck if x) + sum(x==type for x in state.buffer_area) == 4:
+                res.append(self.take_action(state, collect_target=type))
 
         for x in state.GOALS:
             collect_all_collectables(state, x)
@@ -180,33 +194,29 @@ class Game:
             if not c: continue
             card = c[-1]
             if get_num(card) and state.goal_buffer[get_type(card)] == get_num(card) - 1:
-                put_to_goal(state, i)
+                res.append(self.take_action(state, source='deck', source_position=i, to='goal'))
 
             for j, col in enumerate(state.deck):
-                if col and get_num(card) and j != i and get_type(col[-1]) != get_type(card) and get_num(col[-1]) == get_num(card) + 1:
-                    put_to_deck(state, j, i)
+                if col and get_num(card) and j != i and \
+                        get_type(col[-1]) != get_type(card) and get_num(col[-1]) == get_num(card) + 1:
+                    res.append(self.take_action(state, source='deck', source_position=i, to='deck', to_position=j))
                 elif not col:
-                    put_to_deck(state, j, i)
+                    res.append(self.take_action(state, source='deck', source_position=i, to='deck', to_position=j))
 
             if len(state.buffer_area) < state.buffer_size:
-                put_to_buffer(state, i)
+                res.append(self.take_action(state, source='deck', source_position=i, to='buffer'))
 
         for i,card in enumerate(state.buffer_area):
             if get_num(card) and state.goal_buffer[get_type(card)] == get_num(card) - 1:
-                put_to_goal(state, i, in_deck=False)
+                res.append(self.take_action(state, source='buffer', source_position=i, to='goal'))
 
             for j, col in enumerate(state.deck):
                 if col and get_num(card) and j != i and get_type(col[-1]) != get_type(card) and get_num(col[-1]) == get_num(card) + 1:
-                    put_to_deck(state, j, i, from_deck=False)
+                    res.append(self.take_action(state, source='buffer', source_position=i, to='deck', to_position=j))
                 elif not col:
-                    put_to_deck(state, j, i, from_deck=False)
-        return set(res)
+                    res.append(self.take_action(state, source='buffer', source_position=i, to='deck', to_position=j))
 
-    def _auto_proceed(self, state):
-        # return the original state if no auto proceed is required
-        # otherwise perform the auto proceed and return the result
-        ss = self.get_successors(state)
-        return self._auto_proceed(ss[0]) if len(ss) == 1 else state
+        return set(x for x in res if x)
 
 def arg_parser_setup():
     parser = argparse.ArgumentParser(description='Test Game logic.')

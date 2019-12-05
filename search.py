@@ -21,25 +21,27 @@ def dfs(game):
             met.add(s)
 
 def star(game):
-    dp = [(40,0,game.start_state)]
+    dp = [(27,0,game.start_state)]
     met = set()
 
     def heuristic(state):
-        goal = 29 - sum(state.goal_buffer.values())
-        collected = 3 - sum(state.collected.values())
-        height = 13 - max(len(c) for c in state.deck)
-        vacancy = 3+8-1 - sum(1 for c in state.deck if not c) + 3 - len(state.buffer_area)
+        goal = 27 - sum(state.goal_buffer.values())
+        #collected = 3 - sum(state.collected.values())
+        #height = 13 - max(len(c) for c in state.deck)
+        #vacancy = 3+8-1 - sum(1 for c in state.deck if not c) + 3 - len(state.buffer_area)
 
-        type,v = min(state.goal_buffer.items(),key=lambda x:x[1])
-        n = type+str(v+1)
-        for c in state.deck:
-            for i,x in enumerate(c):
-                if x == n:
-                    next_step = len(c) - i - 1
-        if n in state.buffer_area:
-            next_step = 0
+        #type,v = min(state.goal_buffer.items(),key=lambda x:x[1])
+        #n = type+str(v+1)
+        #for c in state.deck:
+        #    for i,x in enumerate(c):
+        #        if x == n:
+        #            next_step = len(c) - i - 1
+        #if n in state.buffer_area:
+        #    next_step = 0
+        #if v == 9:
+        #    next_step = 0
 
-        return goal + next_step
+        return goal #+ next_step + collected + height + vacancy
 
     while dp:
         _, cost, state = heapq.heappop(dp)
