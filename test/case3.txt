@@ -1,0 +1,8 @@
+r b3 g6 b g4
+r1 r8 g g1 g9
+r r5 g8 b7 f
+b2 g5 b b5 b6
+r3 g7 r7 b9 b8
+r g2 g b b4
+b r r6 b1 g
+r4 g3 r2 g r9
