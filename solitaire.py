@@ -82,6 +82,7 @@ class Game:
                 for x in line.strip().split():
                     column.append(x)
         state.record()
+        self.is_valid_state(state)
         return state
 
     def is_valid_state(self, state):
@@ -106,8 +107,8 @@ class Game:
                 'Number card is missing'
 
         except AssertionError as e:
-            print(e)
             state.visualize()
+            raise e
 
     def is_goal_state(self, state):
         # check whether is goal state
@@ -129,8 +130,11 @@ class Game:
 
         # determine whether this action is locked
         if (source == 'deck' and source_position in state.locked_to_locker) or\
-                (source == 'buffer' and 'buffer' in state.locked_to_locker):
+                (source == 'buffer' and source_position + state.DECK_COLUMN_NUM in state.locked_to_locker):
             return None
+
+        target_map = {'goal':'', 'buffer':len(state.buffer_area)+state.DECK_COLUMN_NUM, 'deck':to_position}
+        source_map = {'deck':source_position, 'buffer':source_position+state.DECK_COLUMN_NUM if isinstance(source_position, int) else 0}
 
         new_state = state.copy()
         if not collect_target:
@@ -139,20 +143,19 @@ class Game:
 
             # locking process
             if to != 'goal':
-                locked = to_position if to == 'deck' else 'buffer'
-                involved = [locked, source_position if source == 'deck' else 'buffer']
+                locked = target_map[to]
+                involved = [locked, source_map[source]]
                 # if not put to goal, the destination is locked
                 new_state.locked_to_locker[locked] = involved
                 for l in involved:
                     new_state.locker_to_locked[l] = locked
 
             # unlocking process
-            involved = [source_position if source_position == 'deck' else 'buffer',
-                        to_position if to == 'deck' else to]
+            involved = [source_map[source], target_map[to]]
             for inv in involved:
                 unlock(new_state, inv)
 
-
+            # handling card destination
             if to=='goal':
                 new_state.goal_buffer[get_type(card)] = get_num(card)
             elif to=='deck':
@@ -193,6 +196,8 @@ class Game:
         if collect_target:
             new_state.solution.append('collect {}'.format(collect_target))
         else:
+            if isinstance(source_position, int): source_position += 1
+            if isinstance(to_position, int): to_position += 1
             new_state.solution.append('{} at {} {} to {} {}'.format(card, source, source_position, to, to_position))
 
         if auto_proceed:
