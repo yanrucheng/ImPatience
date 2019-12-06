@@ -134,7 +134,8 @@ class Game:
             return None
 
         target_map = {'goal':'', 'buffer':len(state.buffer_area)+state.DECK_COLUMN_NUM, 'deck':to_position}
-        source_map = {'deck':source_position, 'buffer':source_position+state.DECK_COLUMN_NUM if isinstance(source_position, int) else 0}
+        source_map = {'deck':source_position,
+            'buffer':source_position+state.DECK_COLUMN_NUM if isinstance(source_position, int) else 0}
 
         new_state = state.copy()
         if not collect_target:
@@ -234,7 +235,7 @@ class Game:
 
         res = [] # if the successor is already visited, a None will be stored in res
         def collect_all_collectables(state, type):
-            if not state.collected[type] and \
+            if not state.collected[type] and (len(state.buffer_area) - state.buffer_size or type in state.buffer_area) and\
                     sum(x[-1]==type for x in state.deck if x) + sum(x==type for x in state.buffer_area) == 4:
                 res.append(self.take_action(state, collect_target=type))
 
