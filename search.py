@@ -1,8 +1,8 @@
 from solitaire import Game
-import collections, argparse, random
+import collections, argparse
 import heapq
 
-def simple_search(game):
+def dfs(game):
     dp = collections.deque([game.start_state])
     met = set()
 
@@ -13,40 +13,22 @@ def simple_search(game):
         if game.is_goal_state(state):
             return state.solution
 
-        states = game.get_successors(state)
-        #print(len(states))
-        for s in states:
+        for s in game.get_successors(state):
             if s not in met:
                 dp.append(s)
             met.add(s)
 
-def star(game):
+def a_star(game):
     dp = [(27,0,game.start_state)]
     met = set()
 
     def heuristic(state):
         goal = 27 - sum(state.goal_buffer.values())
-        #collected = 3 - sum(state.collected.values())
-        #height = 13 - max(len(c) for c in state.deck)
-        #vacancy = 3+8-1 - sum(1 for c in state.deck if not c) + 3 - len(state.buffer_area)
-
-        #type,v = min(state.goal_buffer.items(),key=lambda x:x[1])
-        #n = type+str(v+1)
-        #for c in state.deck:
-        #    for i,x in enumerate(c):
-        #        if x == n:
-        #            next_step = len(c) - i - 1
-        #if n in state.buffer_area:
-        #    next_step = 0
-        #if v == 9:
-        #    next_step = 0
-
-        return goal #+ next_step + collected + height + vacancy
+        return goal
 
     while dp:
         _, cost, state = heapq.heappop(dp)
         state.visualize()
-        #print(hash(state))
 
         if game.is_goal_state(state):
             return state.solution
@@ -60,13 +42,20 @@ def star(game):
 def arg_parser_setup():
     parser = argparse.ArgumentParser(description='Test Game logic.')
     parser.add_argument('-f', '--filename', default='test/case1.txt', help='Input test case filename.')
+    parser.add_argument('-m', '--method', default='dfs', help='Search method selection')
+    parser.add_argument('-v', '--verbose', default=True, help='Whether to print out solution in console')
     return parser.parse_args()
 
-if __name__ == '__main__':
+def main():
+    search_func_dict = { 'dfs': dfs, 'a_star': a_star, }
     args = arg_parser_setup()
     game = Game(args.filename)
-    state = game.start_state
-    res = simple_search(game)
-    for i,x in enumerate(res):
-        print('Step {}: {}'.format(i, x))
+    res = search_func_dict[args.method](game)
+
+    if args.verbose:
+        for i,x in enumerate(res): print('Step {}: {}'.format(i, x))
+
+
+if __name__ == '__main__':
+    main()
 
