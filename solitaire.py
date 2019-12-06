@@ -1,5 +1,5 @@
 import collections
-import argparse, copy
+import argparse
 from functools import lru_cache, total_ordering
 
 @lru_cache()
@@ -54,7 +54,20 @@ class GameState:
         return sum(self.goal_buffer.values()) > sum(other.goal_buffer.values())
 
     def copy(self):
-        return copy.deepcopy(self)
+        state = GameState()
+        state.buffer_area = list(self.buffer_area)
+        state.buffer_size = self.buffer_size
+        state.goal_buffer = dict(self.goal_buffer)
+        state.collected = dict(self.collected)
+        state.deck = [list(l) for l in self.deck]
+        state.flower_in_deck = self.flower_in_deck
+
+        state.solution = list(self.solution)
+        state.history = set(self.history)
+        state.locked_to_locker = dict(self.locked_to_locker)
+        state.locker_to_locked = dict(self.locker_to_locked)
+
+        return state
 
     def record(self):
         self.history.add(hash(self))
