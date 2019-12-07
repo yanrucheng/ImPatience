@@ -2,9 +2,19 @@ from solitaire import Game
 import collections, argparse, random
 import heapq
 
+class CompactSet:
+    def __init__(self):
+        self.set = set()
+
+    def add(self, obj):
+        self.set.add(hash(obj))
+
+    def __contains__(self, obj):
+        return hash(obj) in self.set
+
 def dfs(game, args):
     dp = collections.deque([game.start_state])
-    met = set()
+    met = CompactSet()
 
     while dp:
         state = dp.pop()
@@ -62,7 +72,7 @@ def a_star_solver(game, verbose=False, max_depth=None):
     heuristic = dig_out_distance
     initial_h = 100
     dp = [(initial_h,0,game.start_state)]
-    met = set()
+    met = CompactSet()
 
     while dp:
         _, cost, state = heapq.heappop(dp)
