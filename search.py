@@ -21,11 +21,10 @@ def dfs(game, args):
         if args.verbose:
             state.visualize()
 
-        if game.is_goal_state(state):
-            return state.solution
-
         important_states, other_states = game.get_successors(state)
         for s in important_states + other_states:
+            if game.is_goal_state(s):
+                return s.solution
             if s not in met:
                 dp.append(s)
             met.add(s)
@@ -83,10 +82,13 @@ def a_star_solver(game, verbose=False, max_depth=None):
         if verbose:
             state.visualize()
 
-        if game.is_goal_state(state):
-            return state.solution
 
         important_states, other_states = game.get_successors(state)
+
+        for s in important_states+other_states:
+            if game.is_goal_state(s):
+                return s.solution
+
         if len(important_states) > 3:
             states = important_states
         elif len(important_states) + len(other_states) < 3:
@@ -108,6 +110,7 @@ def arg_parser_setup():
     parser.add_argument('-s', '--seed', default=2019, type=int, help='Random seed')
     parser.add_argument('-v', '--verbose', default=False, action='store_true', help='Whether to print out searching details')
     return parser.parse_args()
+
 
 def main():
     search_func_dict = { 'dfs': dfs, 'a_star': a_star}
